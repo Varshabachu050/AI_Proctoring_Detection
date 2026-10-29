@@ -1,0 +1,396 @@
+
+{% extends "base.html" %}
+
+{% block title %}{{ student.name }} · {{ exam.title }}{% endblock %}
+
+{% block content %}
+{% set a = attempt %}
+{% set col = {'Low':'#486581','Medium':'#A56B2A','High':'#B54747'}.get(a.risk_level, '#627487') %}
+
+<style>
+  .attempt-detail .correct-option {
+    font-weight: 700;
+    color: #334E68;
+  }
+</style>
+
+<div class="attempt-detail">
+
+<div class="page-head">
+  <div>
+    <p class="small">
+      <a href="{{ url_for('examiner.exam_detail', exam_id=exam.id) }}">
+        ← {{ exam.title }}
+      </a>
+    </p>
+
+    <h1>{{ student.name }}</h1>
+
+    <p class="muted small">
+      {{ student.email }} · started {{ a.started_at|localtime }}
+      · time used {{ duration_sec|duration }}
+    </p>
+
+    <span class="badge {{ a.status }}">
+      {{ a.status.replace('_', ' ') }}
+    </span>
+  </div>
+
+  <div class="row">
+    <a class="btn"
+       href="{{ url_for('examiner.attempt_pdf', attempt_id=a.id) }}">
+      ⬇ Download PDF report
+    </a>
+
+    <form method="post"
+          action="{{ url_for('examiner.reset_attempt', attempt_id=a.id) }}"
+          onsubmit="return confirm('Delete this attempt and its evidence so the student can retake the exam?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <button class="btn danger" type="submit">
+        Allow retake
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- Overview -->
+<div class="grid g3">
+
+  <div class="card row" style="gap:20px">
+    <div class="donut risk-{{ a.risk_level|lower }}"
+         data-misuse="{{ a.misuse_pct }}"
+         data-color="{{ col }}">
+      <div>
+        <div>
+          <b data-color="{{ col }}" class="js-color">
+            {{ '%g'|format(a.misuse_pct) }}%
+          </b>
+          <br>
+          <small>misuse</small>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <span class="badge {{ a.risk_level }}">
+        {{ a.risk_level }} risk
+      </span>
+
+      <p class="small muted" style="margin-top:8px">
+        {{ a.violation_count }} violation(s) recorded
+      </p>
+    </div>
+  </div>
+
+  <div class="card stat">
+    <div class="n">
+      {{ '%g'|format(a.score) }}
+      <span class="muted" style="font-size:1rem">
+        / {{ '%g'|format(total_marks) }}
+      </span>
+    </div>
+
+    <div class="l">
+      Score
+      ({{ '%.0f'|format((a.score / total_marks * 100) if total_marks else 0) }}%)
+      {% if a.pending %}
+        · {{ a.pending }} answer(s) await grading
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Activity over time</h3>
+
+    <div class="tl">
+      {% for b in buckets %}
+        <div class="{{ 'zero' if not b }}"
+             data-height="{{ (b / max_bucket * 100) if b and max_bucket else 3 }}"
+             class="js-height {{ 'zero' if not b }}">
+          {% if b %}
+            <span>{{ b }}</span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="row between small muted">
+      <span>Start</span>
+      <span>End</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- AI analysis -->
+<div class="card" style="margin-top:18px">
+  <h2>AI analysis</h2>
+
+  <ul style="margin:10px 0 0 20px">
+    {% for n in analysis %}
+      <li style="margin:5px 0">{{ n }}</li>
+    {% else %}
+      <li class="muted">No analysis is available for this attempt.</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<!-- Violation breakdown -->
+<div class="card" style="margin-top:18px">
+  <h2>Violation breakdown</h2>
+
+  {% if not breakdown %}
+    <p class="muted small" style="margin-top:8px">
+      No violations recorded.
+    </p>
+  {% endif %}
+
+  {% for r in breakdown %}
+    <div class="bar-row">
+      <span>
+        <i class="dot js-color" data-color="{{ r.color }}"></i>
+        {{ r.label }}
+      </span>
+
+      <div class="bar">
+        <i class="js-bar"
+           data-width="{{ (r.count / max_count * 100) if max_count else 0 }}"
+           data-color="{{ r.color }}"></i>
+      </div>
+
+      <b>{{ r.count }}</b>
+    </div>
+  {% endfor %}
+
+  {% if breakdown %}
+    <p class="hint" style="margin-top:10px">
+      Risk points = weight × min(count, cap).
+      Misuse % = 100 × (1 − e<sup>−points/60</sup>).
+      Low &lt; 25%, Medium 25–50%, High ≥ 50%.
+    </p>
+  {% endif %}
+</div>
+
+<!-- Evidence timeline -->
+<div class="card" style="margin-top:18px">
+  <h2>Evidence timeline</h2>
+
+  {% if not violations %}
+    <p class="muted small" style="margin-top:8px">
+      Nothing to show.
+    </p>
+  {% else %}
+
+    <div class="ev-grid" style="margin-top:14px">
+      {% for v in violations %}
+        <div class="ev">
+
+          {% if v.has_shot %}
+            <img
+              loading="lazy"
+              src="{{ url_for('examiner.evidence', violation_id=v.id) }}"
+              data-zoom="{{ url_for('examiner.evidence', violation_id=v.id) }}"
+              alt="{{ vlabel(v.vtype) }}">
+          {% else %}
+            <div
+              style="aspect-ratio:4/3;display:grid;place-items:center;background:#EAF0F5"
+              class="muted small">
+              No screenshot<br>(browser event)
+            </div>
+          {% endif %}
+
+          <div class="cap">
+            <b>
+              <i class="dot js-color" data-color="{{ vcolor(v.vtype) }}"></i>
+              {{ vlabel(v.vtype) }}
+            </b>
+
+            <div>
+              T+{{ '%02d'|format(v.offset_sec // 60) }}:{{ '%02d'|format(v.offset_sec % 60) }}
+              · {{ v.occurred_at|localtime }}
+            </div>
+
+            {% if v.detail %}
+              <div class="muted">{{ v.detail }}</div>
+            {% endif %}
+          </div>
+
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+<!-- Answers and grading -->
+<form method="post"
+      action="{{ url_for('examiner.grade', attempt_id=a.id) }}"
+      class="card"
+      style="margin-top:18px">
+
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div class="row between">
+    <h2>Answers &amp; grading</h2>
+
+    {% if a.status != 'in_progress' and answers|selectattr('qtype', 'equalto', 'text')|list %}
+      <button class="btn sm" type="submit">
+        Save grades
+      </button>
+    {% endif %}
+  </div>
+
+  {% for q in answers %}
+    {% set got = q.manual_marks if q.manual_marks is not none else q.auto_marks %}
+
+    <div class="qcard js-border"
+         data-border-color="{{ '#486581' if got == q.marks else '#D8DEE6' }}">
+
+      <div class="qhead">
+        <b>Q{{ loop.index }} · {{ q.qtype|upper }}</b>
+
+        <span class="badge">
+          {{ '%g'|format(got) if got is not none else 'pending' }}
+          / {{ '%g'|format(q.marks) }}
+        </span>
+      </div>
+
+      <p style="margin:8px 0;white-space:pre-wrap">{{ q.text }}</p>
+
+      {% if q.qtype == 'mcq' %}
+        {% for o in q.options %}
+          <div class="small {{ 'correct-option' if loop.index0|string == q.correct else '' }}"
+               style="padding:2px 0">
+
+            {{ '◉' if q.answer == loop.index0|string else '○' }}
+            {{ o }}
+
+            {{ ' ✓ correct' if loop.index0|string == q.correct else '' }}
+          </div>
+        {% endfor %}
+
+        {% if not q.answer %}
+          <div class="small muted">(not answered)</div>
+        {% endif %}
+
+      {% elif q.qtype == 'numeric' %}
+        <div class="small">
+          Answer: <b>{{ q.answer or '(not answered)' }}</b>
+          · expected {{ q.correct }}
+          {% if q.tolerance %}
+            ± {{ q.tolerance }}
+          {% endif %}
+        </div>
+
+      {% else %}
+        <div class="small"
+             style="background:#F4F6F8;border:1px solid #D8DEE6;border-radius:8px;padding:10px;white-space:pre-wrap">
+          {{ q.answer or '(not answered)' }}
+        </div>
+
+        {% if q.correct %}
+          <div class="small muted" style="margin-top:6px">
+            <b>Model answer:</b> {{ q.correct }}
+          </div>
+        {% endif %}
+
+        {% if a.status != 'in_progress' and q.answer and q.answer.strip() %}
+          <div class="row" style="margin-top:10px">
+            <input
+              type="number"
+              step="0.5"
+              min="0"
+              max="{{ q.marks }}"
+              name="marks_{{ q.qid }}"
+              value="{{ '%g'|format(q.manual_marks) if q.manual_marks is not none else '' }}"
+              placeholder="Marks (max {{ '%g'|format(q.marks) }})"
+              style="width:170px">
+
+            <input
+              name="feedback_{{ q.qid }}"
+              value="{{ q.feedback or '' }}"
+              placeholder="Feedback (optional)"
+              style="flex:1;min-width:200px"
+              maxlength="1000">
+          </div>
+        {% endif %}
+      {% endif %}
+    </div>
+
+  {% else %}
+    <p class="muted small" style="margin-top:12px">
+      No answers are available for this attempt.
+    </p>
+  {% endfor %}
+
+</form>
+
+</div>
+
+<script>
+(() => {
+  const clamp = (value, min, max) =>
+    Math.max(min, Math.min(max, value));
+
+  // Donut chart
+  document.querySelectorAll(".donut[data-misuse]").forEach((element) => {
+    const misuse = Number(element.dataset.misuse);
+    const color = element.dataset.color;
+
+    if (Number.isFinite(misuse)) {
+      element.style.setProperty("--p", String(clamp(misuse, 0, 100)));
+    }
+
+    if (color) {
+      element.style.setProperty("--c", color);
+    }
+  });
+
+  // Dynamic text and indicator colors
+  document.querySelectorAll(".js-color[data-color]").forEach((element) => {
+    const color = element.dataset.color;
+
+    if (color) {
+      if (element.classList.contains("js-color") &&
+          element.tagName === "B") {
+        element.style.color = color;
+      } else {
+        element.style.backgroundColor = color;
+      }
+    }
+  });
+
+  // Activity timeline heights
+  document.querySelectorAll(".js-height[data-height]").forEach((element) => {
+    const height = Number(element.dataset.height);
+
+    if (Number.isFinite(height)) {
+      element.style.height = `${clamp(height, 0, 100)}%`;
+    }
+  });
+
+  // Violation bar widths and colors
+  document.querySelectorAll(".js-bar").forEach((element) => {
+    const width = Number(element.dataset.width);
+    const color = element.dataset.color;
+
+    if (Number.isFinite(width)) {
+      element.style.width = `${clamp(width, 0, 100)}%`;
+    }
+
+    if (color) {
+      element.style.backgroundColor = color;
+    }
+  });
+
+  // Answer card border colors
+  document.querySelectorAll(".js-border[data-border-color]").forEach((element) => {
+    const color = element.dataset.borderColor;
+
+    if (color) {
+      element.style.borderLeftColor = color;
+    }
+  });
+})();
+</script>
+{% endblock %}

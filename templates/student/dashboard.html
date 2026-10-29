@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}My exams{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>My exams</h1><p class="muted"></p></div></div>
+{% if not exams %}
+  <div class="card center"><div style="font-size:2.5rem">📭</div><p class="muted">No exams have been assigned to you yet.</p></div>
+{% endif %}
+<div class="grid g2">
+{% for e in exams %}
+  <div class="card">
+    <div class="row between"><h2>{{ e.title }}</h2><span class="badge {{ e.state }}">{{ e.state.replace('_',' ') }}</span></div>
+    <p class="muted small">by {{ e.examiner_name }}</p>
+    {% if e.description %}<p class="small" style="margin-top:8px">{{ e.description[:200] }}</p>{% endif %}
+    <div class="row small muted" style="margin-top:12px">
+      <span>⏱ {{ e.duration_min }} min</span><span>❓ {{ e.n_questions }} questions</span><span>🎯 {{ '%g'|format(e.total_marks) }} marks</span>
+    </div>
+    <p class="small muted" style="margin-top:8px">Window: {{ e.start_at|localtime }} → {{ e.end_at|localtime }}</p>
+    <div style="margin-top:16px">
+      {% if e.state == 'open' %}<a class="btn" href="{{ url_for('student.take', exam_id=e.id) }}">Start exam</a>
+      {% elif e.state == 'in_progress' %}<a class="btn green" href="{{ url_for('student.take', exam_id=e.id) }}">Resume exam</a>
+      {% elif e.state == 'submitted' %}<p>Attempted</p>
+      {% elif e.state == 'upcoming' %}<button class="btn" disabled>Not started yet</button>
+      {% else %}<button class="btn" disabled>Window closed</button>{% endif %}
+    </div>
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

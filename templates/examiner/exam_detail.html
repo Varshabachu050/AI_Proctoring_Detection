@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ exam.title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ exam.title }}</h1>
+    <p class="muted small">{{ exam.duration_min }} min · {{ n_questions }} questions · {{ '%g'|format(total) }} marks · {{ exam.start_at|localtime }} → {{ exam.end_at|localtime }}</p>
+    <span class="badge {{ 'open' if exam.published else 'draft' }}">{{ 'Published' if exam.published else 'Draft' }}</span>
+    {% if exam.max_violations %}<span class="badge">auto-submit at {{ exam.max_violations }} violations</span>{% endif %}
+  </div>
+  <div class="row">
+    <a class="btn ghost" href="{{ url_for('examiner.edit_exam', exam_id=exam.id) }}">Edit</a>
+    <form method="post" action="{{ url_for('examiner.toggle_publish', exam_id=exam.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn ghost" type="submit">{{ 'Unpublish' if exam.published else 'Publish' }}</button></form>
+    <a class="btn" href="{{ url_for('examiner.exam_pdf', exam_id=exam.id) }}">⬇ Summary PDF</a>
+    <form method="post" action="{{ url_for('examiner.delete_exam', exam_id=exam.id) }}" onsubmit="return confirm('Delete this exam and ALL attempts, evidence and reports? This cannot be undone.')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn danger" type="submit">Delete</button></form>
+  </div>
+</div>
+
+<div class="grid g4">
+  <div class="card stat"><div class="n">{{ stats.completed }}<span class="muted" style="font-size:1rem"> / {{ stats.assigned }}</span></div><div class="l">Completed / assigned{% if stats.live %} · {{ stats.live }} in progress{% endif %}</div></div>
+  <div class="card stat"><div class="n">{{ '%.0f'|format(stats.avg_score_pct) }}%</div><div class="l">Average score</div></div>
+  <div class="card stat"><div class="n">{{ '%.1f'|format(stats.avg_misuse) }}%</div><div class="l">Average misuse likelihood</div></div>
+  <div class="card stat"><div class="n" style="color:var(--bad)">{{ stats.high }}</div><div class="l">High-risk attempts</div></div>
+</div>
+
+<div class="card" style="margin-top:18px">
+  <div class="row between"><h2>Attempts <span class="small muted" id="liveNote">{% if stats.live %}· live, refreshing…{% endif %}</span></h2></div>
+  {% if not rows %}<p class="muted" style="margin-top:10px">No student has started this exam yet.</p>{% else %}
+  <div class="tbl-wrap"><table id="attemptsTbl">
+    <thead><tr><th>Student</th><th>Status</th><th>Score</th><th>Misuse %</th><th>Risk</th><th>Violations</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr data-attempt="{{ r.id }}" data-status="{{ r.status }}">
+      <td><b>{{ r.name }}</b><div class="small muted">{{ r.email }}</div></td>
+      <td><span class="badge {{ r.status }} c-status">{{ r.status.replace('_',' ') }}</span></td>
+      <td class="c-score">{{ '%g'|format(r.score) }} / {{ '%g'|format(total) }}{% if r.pending %} <span class="badge draft" title="Descriptive answers awaiting grading">{{ r.pending }} to grade</span>{% endif %}</td>
+      <td class="c-misuse"><b>{{ '%.1f'|format(r.misuse_pct) }}%</b></td>
+      <td><span class="badge {{ r.risk_level }} c-risk">{{ r.risk_level }}</span></td>
+      <td class="c-viol">{{ r.violation_count }}</td>
+      <td class="right"><a class="btn ghost sm" href="{{ url_for('examiner.attempt_detail', attempt_id=r.id) }}">Report</a></td>
+    </tr>
+    {% endfor %}
+    </tbody></table></div>{% endif %}
+</div>
+
+<div class="grid g2" style="margin-top:18px">
+  <div class="card"><h2>Risk distribution</h2>
+    {% for lvl, n in [('Low', stats.low), ('Medium', stats.medium), ('High', stats.high)] %}
+    <div class="bar-row"><span>{{ lvl }}</span><div class="bar"><i style="width:{{ (n / (rows|length) * 100) if rows else 0 }}%;background:{{ {'Low':'#16a34a','Medium':'#d97706','High':'#dc2626'}[lvl] }}"></i></div><b>{{ n }}</b></div>
+    {% endfor %}
+  </div>
+  <div class="card"><h2>Most common violations</h2>
+    {% if not vtotals %}<p class="muted small" style="margin-top:8px">No violations recorded yet.</p>{% endif %}
+    {% for v in vtotals %}
+    <div class="bar-row"><span>{{ v.label }}</span><div class="bar"><i style="width:{{ v.count / max_vt * 100 }}%;background:{{ v.color }}"></i></div><b>{{ v.count }}</b></div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if not_started %}
+<div class="card" style="margin-top:18px"><h2>Assigned, not started ({{ not_started|length }})</h2>
+  <p class="small muted" style="margin-top:8px">{% for s in not_started %}{{ s.name }}{{ ', ' if not loop.last }}{% endfor %}</p></div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if rows and stats.live %}
+<script>
+(function(){
+  const url = {{ url_for('examiner.live', exam_id=exam.id)|tojson }};
+  const known = new Set(Array.from(document.querySelectorAll('tr[data-attempt]')).map(r => r.dataset.attempt));
+  async function tick(){
+    try{
+      const r = await fetch(url, {credentials:'same-origin'}); if(!r.ok) return;
+      const list = await r.json();
+      let reload = false, live = 0;
+      list.forEach(a => {
+        const row = document.querySelector('tr[data-attempt="'+a.id+'"]');
+        if(!row){ reload = true; return; }
+        if(row.dataset.status !== a.status) reload = true;
+        if(a.status === 'in_progress') live++;
+        row.querySelector('.c-misuse').innerHTML = '<b>'+a.misuse_pct.toFixed(1)+'%</b>';
+        const risk = row.querySelector('.c-risk'); risk.textContent = a.risk; risk.className = 'badge '+a.risk+' c-risk';
+        row.querySelector('.c-viol').textContent = a.violations;
+      });
+      if(reload) return location.reload();
+      if(!live) { clearInterval(timer); document.getElementById('liveNote').textContent=''; }
+    }catch(e){}
+  }
+  const timer = setInterval(tick, 8000);
+})();
+</script>
+{% endif %}
+{% endblock %}

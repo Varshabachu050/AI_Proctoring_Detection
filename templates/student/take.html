@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}{{ exam.title }}{% endblock %}
+{% block nav %}{% endblock %}
+{% block body %}
+{% if state not in ('open','in_progress') %}
+<main class="container">
+  <div class="card narrow center" style="margin-top:40px">
+    <h1>{{ exam.title }}</h1>
+    {% if state == 'upcoming' %}<p class="muted" style="margin:12px 0">This exam opens {{ exam.start_at|localtime }}.</p>
+    {% elif state == 'closed' %}<p class="muted" style="margin:12px 0">The exam window has closed.</p>
+    {% else %}<p class="muted" style="margin:12px 0">You have already submitted this exam.</p>
+      {% if attempt %}<p>Attempted</p>{% endif %}{% endif %}
+    <p style="margin-top:16px"><a class="btn" href="{{ url_for('student.dashboard') }}">Back</a></p>
+  </div>
+</main>
+{% else %}
+
+<!-- ============ pre-exam gate ============ -->
+<div class="overlay on" id="gate">
+  <div class="card">
+    <h1>{{ exam.title }}</h1>
+    <p class="muted small">{{ exam.duration_min }} minutes · {{ n_questions }} questions{% if state == 'in_progress' %} · <b>resuming an exam in progress</b>{% endif %}</p>
+    {% if exam.description %}<p class="small" style="margin-top:8px">{{ exam.description }}</p>{% endif %}
+    <ul class="rules">
+      <li>Your webcam and microphone are monitored by AI during the exam.</li>
+      <li>Stay alone, face the screen, and keep your face fully visible.</li>
+      <li>No phones, books, notes, second devices or other people.</li>
+      <li>Do not switch tabs, leave fullscreen, copy or paste.</li>
+      <li>Only a screenshot of a flagged moment is saved - video is analysed in your browser and not recorded.</li>
+    </ul>
+    <ul class="gate-steps" id="steps">
+      <li id="st-cam"><span class="s">1</span>Camera and microphone access</li>
+      <li id="st-model"><span class="s">2</span>Loading AI proctoring models</li>
+      <li id="st-face"><span class="s">3</span>Exactly one face detected</li>
+      <li id="st-calib"><span class="s">4</span>Calibrating - look straight at the screen and stay quiet</li>
+    </ul>
+    <div class="cam" style="max-width:260px;margin:8px auto"><video id="gateVideo" autoplay playsinline muted></video></div>
+    <div class="meter" style="max-width:260px;margin:8px auto" title="Microphone level"><i id="gateMic"></i></div>
+    <div class="meter calib" style="max-width:260px;margin:8px auto" title="Calibration progress"><i id="gateCalib"></i></div>
+    <p class="small center" id="gateHint" style="margin-top:8px;min-height:1.3em"></p>
+    <p class="tiny muted center" id="gateDiag"></p>
+    <p class="center"><button class="btn ghost sm" id="btnRecalib" type="button" style="display:none">Restart calibration</button></p>
+    <div id="gateMsg" class="flash error" style="display:none;margin-top:14px"></div>
+    <label class="inline-check" style="margin-top:14px"><input type="checkbox" id="consent"> I understand and consent to being monitored during this exam.</label>
+    <div class="row" style="margin-top:16px">
+      <button class="btn" id="btnEnable">Enable camera &amp; microphone</button>
+      <button class="btn green" id="btnStart" disabled>{{ 'Resume exam' if state == 'in_progress' else 'Start exam' }}</button>
+      <a class="btn ghost" href="{{ url_for('student.dashboard') }}">Cancel</a>
+    </div>
+  </div>
+</div>
+
+<!-- ============ fullscreen / camera lost blocker ============ -->
+<div class="overlay" id="blocker">
+  <div class="card center">
+    <div style="font-size:2.5rem">⛔</div>
+    <h2 id="blockTitle">Return to fullscreen</h2>
+    <p class="muted" id="blockMsg" style="margin:8px 0 16px">This exam must be taken in fullscreen. The exit was recorded.</p>
+    <button class="btn" id="blockBtn">Continue exam</button>
+  </div>
+</div>
+
+<!-- ============ confirm submit ============ -->
+<div class="overlay" id="confirmBox">
+  <div class="card center">
+    <h2>Submit exam?</h2>
+    <p class="muted" id="confirmMsg" style="margin:8px 0 16px"></p>
+    <div class="row" style="justify-content:center">
+      <button class="btn ghost" id="confirmNo">Keep working</button>
+      <button class="btn green" id="confirmYes">Submit now</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="exam-bar"><div class="exam-bar-in">
+  <b>🛡️ {{ exam.title }}</b>
+  <span style="flex:1"></span>
+  <span class="small" id="warnCount">⚠ 0 warnings</span>
+  <span class="small" id="saveState" style="color:#94a3b8"></span>
+  <span class="timer" id="timer">--:--</span>
+  <button class="btn green sm" id="btnSubmit" disabled>Submit exam</button>
+</div></div>
+
+<div class="exam-wrap" id="examWrap" style="visibility:hidden">
+  <section class="card" id="qPane">
+    <div class="row between"><span class="badge" id="qMeta"></span><span class="muted small" id="qMarks"></span></div>
+    <div class="q-text" id="qText"></div>
+    <div id="qInput"></div>
+    <div class="row between" style="margin-top:22px">
+      <button class="btn ghost" id="btnPrev">← Previous</button>
+      <button class="btn" id="btnNext">Next →</button>
+    </div>
+  </section>
+  <aside class="side">
+    <div class="card" style="padding:12px">
+      <div class="cam"><video id="liveVideo" autoplay playsinline muted></video><span class="rec">● MONITORED</span></div>
+      <div class="chips" style="margin-top:10px">
+        <span class="chip" id="chipFace">Face: -</span>
+        <span class="chip" id="chipGaze">Gaze: -</span>
+        <span class="chip" id="chipMic">Mic: -</span>
+      </div>
+      <div class="meter" style="margin-top:10px"><i id="liveMic"></i></div>
+    </div>
+    <div class="card" style="padding:14px"><h3 style="margin-bottom:10px">Questions</h3><div class="palette" id="palette"></div></div>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if state in ('open','in_progress') %}
+
+<div
+  id="exam-config"
+  data-exam-id="{{ exam.id }}"
+  data-resuming="{{ 'true' if state == 'in_progress' else 'false' }}"
+  hidden>
+</div>
+
+<script type="module">
+  const config = document.getElementById("exam-config");
+
+  window.EXAM = {
+    id: Number(config.dataset.examId),
+    resuming: config.dataset.resuming === "true"
+  };
+</script>
+
+<script type="module" src="{{ url_for('static', filename='js/exam.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/exam.js') }}"></script>
+{% endif %}
+{% endblock %}

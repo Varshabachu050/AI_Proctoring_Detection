@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Register{% endblock %}
+{% block content %}
+<div class="card auth-card">
+  <h1>Create your account</h1>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>I am a</label>
+    <div class="seg">
+      <label><input type="radio" name="role" value="student" {{ 'checked' if form.get('role','student')=='student' }}>  Student</label>
+      <label><input type="radio" name="role" value="examiner" {{ 'checked' if form.get('role')=='examiner' }}> Examiner</label>
+    </div>
+    <label for="name">Full name</label>
+    <input id="name" name="name" required maxlength="80" value="{{ form.get('name','') }}">
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" required maxlength="120" autocomplete="username" value="{{ form.get('email','') }}">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password">
+    <div class="hint">At least 8 characters.</div>
+    <label for="confirm">Confirm password</label>
+    <input id="confirm" name="confirm" type="password" required minlength="8" autocomplete="new-password">
+    {% if invite_required %}
+    <div id="invite-wrap">
+      <label for="invite_code">Examiner invite code</label>
+      <input id="invite_code" name="invite_code" autocomplete="off">
+      <div class="hint">Required only when registering as an examiner.</div>
+    </div>
+    {% endif %}
+    <button class="btn block" style="margin-top:20px" type="submit">Register</button>
+  </form>
+  <p class="small muted center" style="margin-top:16px">Already registered? <a href="{{ url_for('auth.login') }}">Log in</a></p>
+</div>
+{% endblock %}
+{% block scripts %}
+{% if invite_required %}
+<script>
+  const wrap=document.getElementById('invite-wrap');
+  const sync=()=>{wrap.style.display=document.querySelector('input[name=role]:checked').value==='examiner'?'block':'none'};
+  document.querySelectorAll('input[name=role]').forEach(r=>r.addEventListener('change',sync)); sync();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit exam' if exam else 'Create exam' }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ 'Edit exam' if exam else 'Create exam' }}</h1>
+  <p class="muted">Add questions, set the schedule, assign students, then publish.</p></div></div>
+
+{% if init.locked %}
+<div class="flash error">Students have already attempted this exam, so questions are locked. You can still change the schedule, assignments and publish status.</div>
+{% endif %}
+
+<div class="card">
+  <h2>Exam details</h2>
+  <label for="title">Title</label><input id="title" maxlength="150" placeholder="e.g. Physics Mid-term">
+  <label for="desc">Instructions / description</label><textarea id="desc" maxlength="2000" style="min-height:80px"></textarea>
+  <div class="grid g4" style="margin-top:0">
+    <div><label for="duration">Duration (minutes)</label><input id="duration" type="number" min="1" max="600" value="60"></div>
+    <div><label for="start">Opens at</label><input id="start" type="datetime-local"></div>
+    <div><label for="end">Closes at</label><input id="end" type="datetime-local"></div>
+    <div><label for="maxv">Auto-submit after N violations</label><input id="maxv" type="number" min="0" max="100" value="0">
+      <div class="hint">0 = never auto-end.</div></div>
+  </div>
+  <div class="hint" style="margin-top:8px">Times are in your local timezone.</div>
+</div>
+
+<div class="card">
+  <div class="row between"><h2>Questions <span class="muted small" id="qSummary"></span></h2>
+    <div class="row" id="addBtns">
+      <button type="button" class="btn ghost sm" data-add="mcq">+ MCQ</button>
+      <button type="button" class="btn ghost sm" data-add="numeric">+ Numerical</button>
+      <button type="button" class="btn ghost sm" data-add="text">+ Descriptive</button>
+    </div></div>
+  <div id="questions"></div>
+</div>
+
+<div class="card">
+  <div class="row between"><h2>Assign students <span class="muted small" id="stuCount"></span></h2>
+    <div class="row"><input id="stuFilter" placeholder="Search students…" style="width:220px">
+    <button type="button" class="btn ghost sm" id="stuAll">Select all</button></div></div>
+  {% if not students %}<p class="muted small" style="margin-top:12px">No students have registered yet. You can save now and assign students later.</p>{% endif %}
+  <div class="stu-list" id="stuList" style="margin-top:12px">
+  {% for s in students %}
+    <label data-s="{{ (s.name ~ ' ' ~ s.email)|lower }}"><input type="checkbox" class="stu" value="{{ s.id }}"> <span>{{ s.name }} <span class="muted small">{{ s.email }}</span></span></label>
+  {% endfor %}
+  </div>
+</div>
+
+<div class="errors" id="errors"></div>
+<div class="row" style="margin-top:18px">
+  <button class="btn" id="btnPublish">Save &amp; publish</button>
+  <button class="btn ghost" id="btnDraft">Save as draft</button>
+  <a class="btn ghost" href="{{ url_for('examiner.exam_detail', exam_id=exam.id) if exam else url_for('examiner.dashboard') }}">Cancel</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="init-data" type="application/json">{{ init|tojson }}</script>
+
+<div
+  id="exam-config"
+  data-save-url="{{ url_for('examiner.save_exam', exam_id=exam.id) if exam else url_for('examiner.save_exam') }}"
+  hidden>
+</div>
+
+<script>
+  const examConfig = document.getElementById("exam-config");
+  window.SAVE_URL = examConfig.dataset.saveUrl;
+</script>
+
+<script src="{{ url_for('static', filename='js/exam_form.js') }}"></script>
+{% endblock %}

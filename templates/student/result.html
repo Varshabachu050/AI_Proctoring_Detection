@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Submitted{% endblock %}
+{% block content %}
+<div class="card narrow center" style="margin-top:30px">
+  <div style="font-size:3rem">✅</div>
+  <h1>Exam submitted</h1>
+  <p class="muted" style="margin:6px 0 18px">{{ att.title }}</p>
+  {% if att.status == 'terminated' %}
+    <div class="flash error">Your exam was ended automatically because the proctoring violation limit was reached.</div>
+  {% elif att.status == 'auto_submitted' %}
+    <div class="flash error" style="background:#ede9fe;color:#5b21b6">Time ran out, so your answers were submitted automatically.</div>
+  {% endif %}
+  <div class="stat card" style="background:#f8fafc;box-shadow:none">
+    <div class="n">{{ '%g'|format(att.score) }} <span class="muted" style="font-size:1rem">/ {{ '%g'|format(att.total_marks) }}</span></div>
+    <div class="l">{% if att.pending %}Score so far - {{ att.pending }} descriptive answer(s) await manual grading{% else %}Your final score{% endif %}</div>
+  </div>
+  <p class="small muted" style="margin:16px 0">Submitted {{ att.submitted_at|localtime }}</p>
+  <a class="btn" href="{{ url_for('student.dashboard') }}">Back to my exams</a>
+</div>
+{% endblock %}

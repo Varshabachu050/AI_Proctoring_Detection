@@ -1,0 +1,28 @@
+# Render Blueprint - creates the web service AND a Postgres database.
+# Docs: https://render.com/docs/blueprint-spec
+databases:
+  - name: ai-proctor-db
+    plan: free              # free Postgres expires after 30 days - upgrade for real use
+    databaseName: aiproctor
+    user: aiproctor
+
+services:
+  - type: web
+    name: ai-proctor
+    runtime: python
+    plan: free              # spins down after 15 min idle; use "starter" ($7) to avoid that
+    buildCommand: pip install -r requirements.txt
+    # 1 worker + threads: keeps memory low (512 MB) and the in-memory login rate-limiter consistent.
+    startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-proctor-db
+          property: connectionString
+      - key: EXAMINER_INVITE_CODE   # you will be asked for a value when creating the Blueprint
+        sync: false

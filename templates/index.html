@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Secure online exams{% endblock %}
+{% block body %}
+<section class="hero">
+  <h1>A simpler way to conduct online exams</h1>
+  <p>Create MCQ, numerical and descriptive exams. Students are monitored through webcam and microphone, and you receive a full evidence report afterwards.</p>
+  <div class="row" style="justify-content:center">
+    <a class="btn" href="{{ url_for('auth.register') }}">Create an account</a>
+    <a class="btn ghost" href="{{ url_for('auth.login') }}">Log in</a>
+  </div>
+</section>
+<main class="container">
+  <div class="grid g3">
+    <div class="card feature"><div class="ic"></div><h3>For examiners</h3><p class="muted small">Build exams, assign students, publish, then review a live dashboard, evidence screenshots and a downloadable PDF report.</p></div>
+    <div class="card feature"><div class="ic"></div><h3>For students</h3><p class="muted small">Log in, check your camera and microphone, then take your assigned exam in a focused, timed environment.</p></div>
+    <div class="card feature"><div class="ic"></div><h3>AI detection</h3><p class="muted small">Multiple faces, looking away, head movement, talking, phones and other objects, tab switching - each captured with a screenshot.</p></div>
+  </div>
+  <div class="card" style="margin-top:18px">
+    <h3>Privacy</h3>
+    <p class="muted small">Video is analysed inside the student's browser. Only a screenshot of the moment a possible violation occurs is sent to the server and stored for the examiner. No continuous video is recorded.</p>
+  </div>
+</main>
+{% endblock %}

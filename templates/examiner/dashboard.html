@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Examiner dashboard{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Conduct Exams</h1><p class="muted">Create exams, monitor attempts and review reports.</p></div>
+  <a class="btn" href="{{ url_for('examiner.new_exam') }}">+ Create exam</a>
+</div>
+{% if not exams %}
+<div class="card center"><div style="font-size:2.5rem">📝</div><p class="muted">You haven't created any exams yet.</p>
+  <p style="margin-top:12px"><a class="btn" href="{{ url_for('examiner.new_exam') }}">Create your first exam</a></p></div>
+{% else %}
+<div class="card"><div class="tbl-wrap"><table>
+  <thead><tr><th>Exam</th><th>Status</th><th>Window</th><th>Questions</th><th>Assigned</th><th>Attempts</th><th>Avg misuse</th><th></th></tr></thead>
+  <tbody>
+  {% for e in exams %}
+  <tr>
+    <td><a href="{{ url_for('examiner.exam_detail', exam_id=e.id) }}"><b>{{ e.title }}</b></a><div class="small muted">{{ e.duration_min }} min</div></td>
+    <td><span class="badge {{ 'open' if e.published else 'draft' }}">{{ 'Published' if e.published else 'Draft' }}</span>
+        {% if e.n_live %}<span class="badge in_progress">{{ e.n_live }} live</span>{% endif %}</td>
+    <td class="small">{{ e.start_at|localtime }}<br>→ {{ e.end_at|localtime }}</td>
+    <td>{{ e.n_questions }}</td><td>{{ e.n_assigned }}</td>
+    <td>{{ e.n_attempts }}{% if e.n_high %} <span class="badge High">{{ e.n_high }} high risk</span>{% endif %}</td>
+    <td>{% if e.avg_misuse is not none %}{{ '%.1f'|format(e.avg_misuse) }}%{% else %}-{% endif %}</td>
+    <td class="right"><a class="btn ghost sm" href="{{ url_for('examiner.exam_detail', exam_id=e.id) }}">Open</a></td>
+  </tr>
+  {% endfor %}
+  </tbody></table></div></div>
+{% endif %}
+{% endblock %}
